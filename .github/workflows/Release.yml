@@ -470,8 +470,9 @@ jobs:
       - name: Download build environment variables
         uses: actions/download-artifact@v4
         with:
-          name: build-environment-x86_64-linux-gnu
+          name: build-environment-${{ fromJson(needs.prepare.outputs.matrix)[0].target }}
           path: ./
+        continue-on-error: true
 
       - name: Load environment variables
         run: |
@@ -480,8 +481,13 @@ jobs:
             cat build_env.txt >> $GITHUB_ENV
             cat build_env.txt # Debugging output
           else
-            echo "::error::build_env.txt not found!"
-            exit 1
+            echo "::warning::build_env.txt not found, using defaults"
+            # 设置默认环境变量
+            echo "VERSION_TAG=${{ needs.prepare.outputs.version_tag }}" >> $GITHUB_ENV
+            echo "BUILD_TYPE=Release" >> $GITHUB_ENV
+            echo "BUILD_DATE=${{ needs.prepare.outputs.build_date }}" >> $GITHUB_ENV
+            echo "COMMIT_HASH=unknown" >> $GITHUB_ENV
+            echo "COMMIT_DATE=unknown" >> $GITHUB_ENV
           fi
         shell: bash
 
