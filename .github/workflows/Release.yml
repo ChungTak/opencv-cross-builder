@@ -1,7 +1,7 @@
 name: Release Build ALL Platforms
 
 # 发布构建配置
-# 基础分支: master
+# 基础分支: main
 on:
   workflow_dispatch:
     inputs:
@@ -206,7 +206,7 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
         with:
-          ref: master
+          ref: main
           fetch-depth: 0
 
       # Setup Android NDK for Android targets
@@ -464,7 +464,7 @@ jobs:
       - name: Checkout Repository (for release context)
         uses: actions/checkout@v4
         with:
-          ref: master
+          ref: main
           fetch-depth: 0
 
       - name: Download build environment variables
