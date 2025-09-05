@@ -268,7 +268,8 @@ if [[ "$TARGET" == *"-linux-android"* ]]; then
     
     # toolchain 参数必须最前，其它参数和源码目录最后
     CMAKE_CMD="cmake -DCMAKE_TOOLCHAIN_FILE=$ANDROID_TOOLCHAIN_FILE -DANDROID_ABI=$ANDROID_ABI -DANDROID_PLATFORM=$ANDROID_PLATFORM -DCMAKE_INSTALL_PREFIX=$INSTALL_DIR -DCMAKE_BUILD_TYPE=$BUILD_TYPE"
-    
+
+
 elif [[ "$TARGET" == *"-linux-harmonyos"* ]]; then
     # 检查 HarmonyOS SDK
     export HARMONYOS_SDK_ROOT="${HARMONYOS_SDK_HOME:-~/sdk/harmonyos/ohos-sdk/linux/native-linux-x64-4.1.9.4-Release/native}"
@@ -300,9 +301,85 @@ elif [[ "$TARGET" == *"-linux-harmonyos"* ]]; then
             ;;
     esac
 
+    # HarmonyOS特定的编译环境配置
+    # 创建编译器包装脚本来过滤不兼容的汇编器参数
+    HARMONYOS_CC_WRAPPER="$PROJECT_ROOT_DIR/harmonyos_cc_wrapper.sh"
+    HARMONYOS_CXX_WRAPPER="$PROJECT_ROOT_DIR/harmonyos_cxx_wrapper.sh"
+    HARMONYOS_ASM_WRAPPER="$PROJECT_ROOT_DIR/harmonyos_asm_wrapper.sh"
+    
+    # 创建C编译器包装器
+    cat > "$HARMONYOS_CC_WRAPPER" << EOF
+#!/bin/bash
+# HarmonyOS C编译器包装器 - 过滤不兼容的参数
+args=()
+for arg in "\$@"; do
+    case "\$arg" in
+        -mrelax-relocations=*)
+            # 跳过这个不兼容的参数
+            continue
+            ;;
+        *)
+            args+=("\$arg")
+            ;;
+    esac
+done
+exec "$TOOLCHAIN/bin/clang" "\${args[@]}"
+EOF
+
+    # 创建C++编译器包装器
+    cat > "$HARMONYOS_CXX_WRAPPER" << EOF
+#!/bin/bash
+# HarmonyOS C++编译器包装器 - 过滤不兼容的参数
+args=()
+for arg in "\$@"; do
+    case "\$arg" in
+        -mrelax-relocations=*)
+            # 跳过这个不兼容的参数
+            continue
+            ;;
+        *)
+            args+=("\$arg")
+            ;;
+    esac
+done
+exec "$TOOLCHAIN/bin/clang++" "\${args[@]}"
+EOF
+
+    # 创建汇编器包装器
+    cat > "$HARMONYOS_ASM_WRAPPER" << EOF
+#!/bin/bash
+# HarmonyOS 汇编器包装器 - 过滤不兼容的参数
+args=()
+for arg in "\$@"; do
+    case "\$arg" in
+        -mrelax-relocations=*)
+            # 跳过这个不兼容的参数
+            continue
+            ;;
+        *)
+            args+=("\$arg")
+            ;;
+    esac
+done
+exec "$TOOLCHAIN/bin/clang" "\${args[@]}"
+EOF
+
+    # 设置执行权限
+    chmod +x "$HARMONYOS_CC_WRAPPER"
+    chmod +x "$HARMONYOS_CXX_WRAPPER" 
+    chmod +x "$HARMONYOS_ASM_WRAPPER"
+
+    # 设置环境变量使用包装器
+    export CC="$HARMONYOS_CC_WRAPPER"
+    export CXX="$HARMONYOS_CXX_WRAPPER"
+    export CMAKE_ASM_COMPILER="$HARMONYOS_ASM_WRAPPER"
+    
+    # HarmonyOS特定的CMake标志
+    HARMONYOS_CMAKE_FLAGS="-DCMAKE_C_COMPILER=$CC -DCMAKE_CXX_COMPILER=$CXX -DCMAKE_ASM_COMPILER=$CMAKE_ASM_COMPILER"
     
     # toolchain 参数必须最前，其它参数和源码目录最后
-    CMAKE_CMD="cmake -DCMAKE_TOOLCHAIN_FILE=$HARMONYOS_TOOLCHAIN_FILE -DOHOS_ARCH=$OHOS_ARCH -DCMAKE_INSTALL_PREFIX=$INSTALL_DIR -DCMAKE_BUILD_TYPE=$BUILD_TYPE"
+    CMAKE_CMD="cmake -DCMAKE_TOOLCHAIN_FILE=$HARMONYOS_TOOLCHAIN_FILE -DOHOS_ARCH=$OHOS_ARCH $HARMONYOS_CMAKE_FLAGS -DCMAKE_INSTALL_PREFIX=$INSTALL_DIR -DCMAKE_BUILD_TYPE=$BUILD_TYPE"
+
 else
     
     # 使用 Zig 作为编译器
@@ -434,30 +511,79 @@ if [ $? -eq 0 ]; then
         
         echo -e "${BLUE}使用 strip 工具: $STRIP_TOOL${NC}"
         
-        # 压缩所有共享库
-        if [ -d "$INSTALL_DIR/lib" ]; then
-            find "$INSTALL_DIR/lib" -name "*.so*" -type f -exec $STRIP_TOOL --strip-unneeded {} \; 2>/dev/null || true
-            find "$INSTALL_DIR/lib" -name "*.a" -type f -exec $STRIP_TOOL --strip-debug {} \; 2>/dev/null || true
+        # 动态确定实际的库目录位置
+        ACTUAL_LIB_DIR=""
+        if [[ "$TARGET" == *"-linux-android"* ]]; then
+            # Android/HarmonyOS 平台尝试多种可能的库目录
+            for lib_path in "$INSTALL_DIR/sdk/native/libs" "$INSTALL_DIR/lib"; do
+                if [ -d "$lib_path" ]; then
+                    ACTUAL_LIB_DIR="$lib_path"
+                    echo -e "${GREEN}找到实际库目录: $ACTUAL_LIB_DIR${NC}"
+                    break
+                fi
+            done
+        else
+            # 标准平台使用标准库目录
+            if [ -d "$INSTALL_DIR/lib" ]; then
+                ACTUAL_LIB_DIR="$INSTALL_DIR/lib"
+            fi
+        fi
+        
+        # 压缩所有共享库和静态库
+        if [ -n "$ACTUAL_LIB_DIR" ] && [ -d "$ACTUAL_LIB_DIR" ]; then
+            find "$ACTUAL_LIB_DIR" -name "*.so*" -type f -exec $STRIP_TOOL --strip-unneeded {} \; 2>/dev/null || true
+            find "$ACTUAL_LIB_DIR" -name "*.a" -type f -exec $STRIP_TOOL --strip-debug {} \; 2>/dev/null || true
             echo -e "${GREEN}库文件压缩完成!${NC}"
+        else
+            echo -e "${YELLOW}警告: 未找到库目录，跳过库文件压缩${NC}"
         fi
         
     fi
     
-    echo -e "${GREEN}OPENCV库文件位于: $INSTALL_DIR/lib/${NC}"
-    echo -e "${GREEN}OPENCV头文件位于: $INSTALL_DIR/include/${NC}"
+    # 动态确定实际的库和头文件目录
+    ACTUAL_LIB_DIR=""
+    ACTUAL_INCLUDE_DIR=""
+    
+    if [[ "$TARGET" == *"-linux-android"* ]]; then
+        # Android/HarmonyOS 平台尝试多种可能的目录结构
+        for lib_path in "$INSTALL_DIR/sdk/native/libs" "$INSTALL_DIR/lib"; do
+            if [ -d "$lib_path" ]; then
+                ACTUAL_LIB_DIR="$lib_path"
+                break
+            fi
+        done
+        
+        for include_path in "$INSTALL_DIR/sdk/native/jni/include" "$INSTALL_DIR/include"; do
+            if [ -d "$include_path" ]; then
+                ACTUAL_INCLUDE_DIR="$include_path"
+                break
+            fi
+        done
+    else
+        # 标准平台使用标准目录
+        if [ -d "$INSTALL_DIR/lib" ]; then
+            ACTUAL_LIB_DIR="$INSTALL_DIR/lib"
+        fi
+        if [ -d "$INSTALL_DIR/include" ]; then
+            ACTUAL_INCLUDE_DIR="$INSTALL_DIR/include"
+        fi
+    fi
+    
+    echo -e "${GREEN}OPENCV库文件位于: ${ACTUAL_LIB_DIR:-未找到}${NC}"
+    echo -e "${GREEN}OPENCV头文件位于: ${ACTUAL_INCLUDE_DIR:-未找到}${NC}"
     
     # 显示安装的文件和大小
-    if [ -d "$INSTALL_DIR/lib" ]; then
+    if [ -n "$ACTUAL_LIB_DIR" ] && [ -d "$ACTUAL_LIB_DIR" ]; then
         echo -e "${BLUE}安装的库文件:${NC}"
-        find "$INSTALL_DIR/lib" -name "*.so*" -o -name "*.a" | head -10 | while read file; do
+        find "$ACTUAL_LIB_DIR" -name "*.so*" -o -name "*.a" | head -10 | while read file; do
             size=$(du -h "$file" 2>/dev/null | cut -f1)
             echo "  $file ($size)"
         done
     fi
     
-    if [ -d "$INSTALL_DIR/include" ]; then
+    if [ -n "$ACTUAL_INCLUDE_DIR" ] && [ -d "$ACTUAL_INCLUDE_DIR" ]; then
         echo -e "${BLUE}安装的头文件目录:${NC}"
-        find "$INSTALL_DIR/include" -type d | head -5
+        find "$ACTUAL_INCLUDE_DIR" -type d | head -5
     fi
     
     # 返回到项目根目录
