@@ -389,11 +389,11 @@ else
     ZIG_CC_WRAPPER="$PROJECT_ROOT_DIR/zig_cc_wrapper.sh"
     ZIG_CXX_WRAPPER="$PROJECT_ROOT_DIR/zig_cxx_wrapper.sh"
     
-    # 对aarch64目标添加NEON禁用标志以修复动态库链接问题
+    # 对ARM架构目标添加NEON禁用标志以修复动态库链接问题
     NEON_DISABLE_FLAGS=""
-    if [[ "$TARGET" == "aarch64-linux-gnu" ]]; then
+    if [[ "$TARGET" == "aarch64-linux-gnu" ]] || [[ "$TARGET" == "arm-linux-gnueabihf" ]] || [[ "$TARGET" == arm-linux-* ]] || [[ "$TARGET" == aarch64-linux-* ]]; then
         NEON_DISABLE_FLAGS="-DPNG_ARM_NEON_OPT=0 -DPNG_ARM_NEON_API_SUPPORTED=0"
-        echo -e "${YELLOW}正在为aarch64目标禁用NEON优化以解决动态库链接问题${NC}"
+        echo -e "${YELLOW}正在为ARM架构目标 $TARGET 禁用NEON优化以解决动态库链接问题${NC}"
     fi
     
     # 创建 Zig CC 包装器脚本，处理潜在的参数兼容性问题
