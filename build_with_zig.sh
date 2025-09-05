@@ -389,18 +389,25 @@ else
     ZIG_CC_WRAPPER="$PROJECT_ROOT_DIR/zig_cc_wrapper.sh"
     ZIG_CXX_WRAPPER="$PROJECT_ROOT_DIR/zig_cxx_wrapper.sh"
     
+    # 对aarch64目标添加NEON禁用标志以修复动态库链接问题
+    NEON_DISABLE_FLAGS=""
+    if [[ "$TARGET" == "aarch64-linux-gnu" ]]; then
+        NEON_DISABLE_FLAGS="-DPNG_ARM_NEON_OPT=0 -DPNG_ARM_NEON_API_SUPPORTED=0"
+        echo -e "${YELLOW}正在为aarch64目标禁用NEON优化以解决动态库链接问题${NC}"
+    fi
+    
     # 创建 Zig CC 包装器脚本，处理潜在的参数兼容性问题
     cat > "$ZIG_CC_WRAPPER" << EOF
 #!/bin/bash
 # Zig CC 包装器 - 确保参数兼容性
-exec zig cc -target $TARGET $ZIG_OPTIMIZE_FLAGS "\$@"
+exec zig cc -target $TARGET $ZIG_OPTIMIZE_FLAGS $NEON_DISABLE_FLAGS "\$@"
 EOF
 
     # 创建 Zig CXX 包装器脚本
     cat > "$ZIG_CXX_WRAPPER" << EOF
 #!/bin/bash
 # Zig C++ 包装器 - 确保参数兼容性
-exec zig c++ -target $TARGET $ZIG_OPTIMIZE_FLAGS "\$@"
+exec zig c++ -target $TARGET $ZIG_OPTIMIZE_FLAGS $NEON_DISABLE_FLAGS "\$@"
 EOF
     
     # 设置执行权限
