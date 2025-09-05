@@ -27,13 +27,13 @@ REQUIRED_DIRS=()
 OPTIONAL_DIRS=("pkgconfig" "bin")
 
 # Determine actual directory structure based on target platform
-if [[ "$TARGET" == *"-linux-android"* ]] || [[ "$TARGET" == *"-linux-harmonyos"* ]]; then
-    # Android/HarmonyOS use SDK directory structure
+if [[ "$TARGET" == *"-linux-android"* ]]; then
+    # Android uses SDK directory structure
     INCLUDE_DIR="sdk/native/jni/include"
     LIB_DIRS=("sdk/native/libs" "sdk/native/3rdparty/libs")
-    echo "Using Android/HarmonyOS SDK directory structure"
+    echo "Using Android SDK directory structure"
 else
-    # Standard platforms use traditional structure
+    # Standard platforms (including HarmonyOS) use traditional structure
     INCLUDE_DIR="include"
     LIB_DIRS=("lib")
     echo "Using standard directory structure"
@@ -59,7 +59,7 @@ done
 
 # Check for library directories (Android may have multiple possible locations)
 LIB_DIR_FOUND=""
-if [[ "$TARGET" == *"-linux-android"* ]] || [[ "$TARGET" == *"-linux-harmonyos"* ]]; then
+if [[ "$TARGET" == *"-linux-android"* ]]; then
     # For Android, check multiple possible library locations
     case "$TARGET" in
         aarch64-linux-android)
@@ -100,7 +100,7 @@ if [[ "$TARGET" == *"-linux-android"* ]] || [[ "$TARGET" == *"-linux-harmonyos"*
         fi
     fi
 else
-    # Standard platform - check traditional lib directory
+    # Standard platform (including HarmonyOS) - check traditional lib directory
     if [ -d "$OUTPUT_DIR/lib" ]; then
         LIB_DIR_FOUND="$OUTPUT_DIR/lib"
         echo "✓ Found: lib"

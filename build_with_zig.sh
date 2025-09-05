@@ -483,8 +483,8 @@ if [ $? -eq 0 ]; then
     # 定义统一的库目录查找函数
     find_lib_directory() {
         local lib_dir=""
-        if [[ "$TARGET" == *"-linux-android"* ]] || [[ "$TARGET" == *"-linux-harmonyos"* ]]; then
-            # Android/HarmonyOS 平台尝试多种可能的库目录，包括架构特定的子目录
+        if [[ "$TARGET" == *"-linux-android"* ]]; then
+            # Android 平台尝试多种可能的库目录，包括架构特定的子目录
             case "$TARGET" in
                 aarch64-linux-android)
                     local arch_dirs=("arm64-v8a")
@@ -521,7 +521,7 @@ if [ $? -eq 0 ]; then
                 fi
             fi
         else
-            # 标准平台使用标准库目录
+            # 标准平台（包括HarmonyOS）使用标准库目录
             if [ -d "$INSTALL_DIR/lib" ]; then
                 lib_dir="$INSTALL_DIR/lib"
             fi
@@ -583,8 +583,8 @@ if [ $? -eq 0 ]; then
     ACTUAL_LIB_DIR=$(find_lib_directory)
     ACTUAL_INCLUDE_DIR=""
     
-    if [[ "$TARGET" == *"-linux-android"* ]] || [[ "$TARGET" == *"-linux-harmonyos"* ]]; then
-        # Android/HarmonyOS 平台的头文件目录
+    if [[ "$TARGET" == *"-linux-android"* ]]; then
+        # Android 平台的头文件目录
         for include_path in "$INSTALL_DIR/sdk/native/jni/include" "$INSTALL_DIR/include"; do
             if [ -d "$include_path" ]; then
                 ACTUAL_INCLUDE_DIR="$include_path"
@@ -592,7 +592,7 @@ if [ $? -eq 0 ]; then
             fi
         done
     else
-        # 标准平台使用标准目录
+        # 标准平台（包括HarmonyOS）使用标准目录
         if [ -d "$INSTALL_DIR/include" ]; then
             ACTUAL_INCLUDE_DIR="$INSTALL_DIR/include"
         fi
