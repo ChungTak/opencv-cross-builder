@@ -478,7 +478,58 @@ cmake --install . --config Release
 if [ $? -eq 0 ]; then
     echo -e "${GREEN}安装成功!${NC}"
     # "修改 pkg-config 文件路径..."
-    #find "${INSTALL_DIR}/lib/pkgconfig" -name "*.pc" -exec sed -i "s|^prefix=.*|prefix=/usr|g" {} \;    # 如果启用了大小优化，进行额外的压缩处理
+    #find "${INSTALL_DIR}/lib/pkgconfig" -name "*.pc" -exec sed -i "s|^prefix=.*|prefix=/usr|g" {} \;
+    
+    # 定义统一的库目录查找函数
+    find_lib_directory() {
+        local lib_dir=""
+        if [[ "$TARGET" == *"-linux-android"* ]] || [[ "$TARGET" == *"-linux-harmonyos"* ]]; then
+            # Android/HarmonyOS 平台尝试多种可能的库目录，包括架构特定的子目录
+            case "$TARGET" in
+                aarch64-linux-android)
+                    local arch_dirs=("arm64-v8a")
+                    ;;
+                arm-linux-android)
+                    local arch_dirs=("armeabi-v7a")
+                    ;;
+                x86_64-linux-android)
+                    local arch_dirs=("x86_64")
+                    ;;
+                x86-linux-android)
+                    local arch_dirs=("x86")
+                    ;;
+                *)
+                    local arch_dirs=("arm64-v8a" "armeabi-v7a" "x86_64" "x86")
+                    ;;
+            esac
+            
+            # 检查多种可能的库目录路径
+            for arch_dir in "${arch_dirs[@]}"; do
+                for lib_path in "$INSTALL_DIR/sdk/native/libs/$arch_dir" "$INSTALL_DIR/sdk/native/libs" "$INSTALL_DIR/lib/$arch_dir" "$INSTALL_DIR/lib"; do
+                    if [ -d "$lib_path" ] && [ "$(find "$lib_path" -name "*.a" -o -name "*.so*" 2>/dev/null | wc -l)" -gt 0 ]; then
+                        lib_dir="$lib_path"
+                        break 2
+                    fi
+                done
+            done
+            
+            # 如果仍未找到，尝试搜索整个sdk目录
+            if [ -z "$lib_dir" ] && [ -d "$INSTALL_DIR/sdk" ]; then
+                local lib_search_result=$(find "$INSTALL_DIR/sdk" -name "*.a" -o -name "*.so*" 2>/dev/null | head -1)
+                if [ -n "$lib_search_result" ]; then
+                    lib_dir=$(dirname "$lib_search_result")
+                fi
+            fi
+        else
+            # 标准平台使用标准库目录
+            if [ -d "$INSTALL_DIR/lib" ]; then
+                lib_dir="$INSTALL_DIR/lib"
+            fi
+        fi
+        echo "$lib_dir"
+    }
+    
+    # 如果启用了大小优化，进行额外的压缩处理
     
     if [ "$OPTIMIZE_SIZE" = true ]; then
         echo -e "${YELLOW}执行额外的库文件压缩...${NC}"
@@ -512,21 +563,9 @@ if [ $? -eq 0 ]; then
         echo -e "${BLUE}使用 strip 工具: $STRIP_TOOL${NC}"
         
         # 动态确定实际的库目录位置
-        ACTUAL_LIB_DIR=""
-        if [[ "$TARGET" == *"-linux-android"* ]]; then
-            # Android/HarmonyOS 平台尝试多种可能的库目录
-            for lib_path in "$INSTALL_DIR/sdk/native/libs" "$INSTALL_DIR/lib"; do
-                if [ -d "$lib_path" ]; then
-                    ACTUAL_LIB_DIR="$lib_path"
-                    echo -e "${GREEN}找到实际库目录: $ACTUAL_LIB_DIR${NC}"
-                    break
-                fi
-            done
-        else
-            # 标准平台使用标准库目录
-            if [ -d "$INSTALL_DIR/lib" ]; then
-                ACTUAL_LIB_DIR="$INSTALL_DIR/lib"
-            fi
+        ACTUAL_LIB_DIR=$(find_lib_directory)
+        if [ -n "$ACTUAL_LIB_DIR" ]; then
+            echo -e "${GREEN}找到实际库目录: $ACTUAL_LIB_DIR${NC}"
         fi
         
         # 压缩所有共享库和静态库
@@ -541,18 +580,11 @@ if [ $? -eq 0 ]; then
     fi
     
     # 动态确定实际的库和头文件目录
-    ACTUAL_LIB_DIR=""
+    ACTUAL_LIB_DIR=$(find_lib_directory)
     ACTUAL_INCLUDE_DIR=""
     
-    if [[ "$TARGET" == *"-linux-android"* ]]; then
-        # Android/HarmonyOS 平台尝试多种可能的目录结构
-        for lib_path in "$INSTALL_DIR/sdk/native/libs" "$INSTALL_DIR/lib"; do
-            if [ -d "$lib_path" ]; then
-                ACTUAL_LIB_DIR="$lib_path"
-                break
-            fi
-        done
-        
+    if [[ "$TARGET" == *"-linux-android"* ]] || [[ "$TARGET" == *"-linux-harmonyos"* ]]; then
+        # Android/HarmonyOS 平台的头文件目录
         for include_path in "$INSTALL_DIR/sdk/native/jni/include" "$INSTALL_DIR/include"; do
             if [ -d "$include_path" ]; then
                 ACTUAL_INCLUDE_DIR="$include_path"
@@ -561,9 +593,6 @@ if [ $? -eq 0 ]; then
         done
     else
         # 标准平台使用标准目录
-        if [ -d "$INSTALL_DIR/lib" ]; then
-            ACTUAL_LIB_DIR="$INSTALL_DIR/lib"
-        fi
         if [ -d "$INSTALL_DIR/include" ]; then
             ACTUAL_INCLUDE_DIR="$INSTALL_DIR/include"
         fi
